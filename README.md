@@ -259,26 +259,32 @@ warehouse_optimization/
 
 After running `julia visualization_demo.jl`, the following files are created:
 
-### `warehouse_layout.png` (90KB)
-- **Static warehouse layout** showing:
-  - ABC storage zones (█ High, ▓ Medium, ░ Low frequency)
-  - AGV starting positions (numbered 1-5)
-  - Order pickup locations (★ symbols by priority)
-  - Input/Output dock positions (◆ symbols)
+### Warehouse Layout
+![Warehouse Layout](warehouse_layout.png)
 
-### `agv_routes.png` (100KB)
-- **AGV route visualization** displaying:
-  - Optimized paths for each AGV (color-coded)
-  - Distance annotations on each route segment
-  - Start → Pickup → Output journey mapping
-  - Storage location background (faded)
+**`warehouse_layout.png`** - Static warehouse layout showing:
+- ABC storage zones (█ High, ▓ Medium, ░ Low frequency)
+- AGV starting positions (numbered 1-5)
+- Order pickup locations (★ symbols by priority)
+- Input/Output dock positions (◆ symbols)
 
-### `agv_animation.gif` (172KB)
-- **5-second animated simulation** showing:
-  - Real-time AGV movement (10 FPS)
-  - Pickup and delivery operations
-  - Route progression with motion trails
-  - Progress indicators and status updates
+### AGV Routes
+![AGV Routes](agv_routes.png)
+
+**`agv_routes.png`** - AGV route visualization displaying:
+- Optimized paths for each AGV (color-coded)
+- Distance annotations on each route segment
+- Start → Pickup → Output journey mapping
+- Storage location background (faded)
+
+### Movement Animation
+![AGV Animation](agv_animation.gif)
+
+**`agv_animation.gif`** - 5-second animated simulation showing:
+- Real-time AGV movement (10 FPS)
+- Pickup and delivery operations
+- Route progression with motion trails
+- Progress indicators and status updates
 
 ---
 
