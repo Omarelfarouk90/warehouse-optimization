@@ -354,9 +354,9 @@ end
 # ===== ANIMATION =====
 
 function create_agv_animation(warehouse, agvs, orders, assignments, filename="agv_animation.gif")
-    """Create animated GIF of AGV movement showing Cartesian patterns"""
+    """Create animated GIF of AGV movement showing Cartesian patterns with demand/storage markers"""
     
-    println("\n🎬 CREATING AGV ANIMATION WITH CARTESIAN MOVEMENT...")
+    println("\n🎬 CREATING AGV ANIMATION WITH CARTESIAN MOVEMENT & MARKERS...")
     println("   This may take a moment...")
     
     # Animation parameters - more frames for smoother Cartesian visualization
@@ -368,28 +368,51 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
         t = (frame - 1) / n_frames  # Time parameter 0 to 1
         
         # Create plot for this frame
-        plt = plot(size=(1200, 600), dpi=100,
+        plt = plot(size=(1400, 700), dpi=100,
                    xlabel="X Position (meters)", ylabel="Y Position (meters)",
-                   title="AGV Cartesian Movement Animation - Frame $frame/$n_frames ($(round(t*100, digits=0))%)",
+                   title="AGV Cartesian Movement with Demand/Storage Markers - Frame $frame/$n_frames ($(round(t*100, digits=0))%)",
                    xlims=(0, WAREHOUSE_WIDTH), ylims=(0, WAREHOUSE_HEIGHT),
                    aspect_ratio=:equal, grid=true, legend=:outertopright)
         
-        # Plot storage locations
-        all_xs = [loc.position[1] * GRID_RESOLUTION for loc in warehouse.storage_locations]
-        all_ys = [loc.position[2] * GRID_RESOLUTION for loc in warehouse.storage_locations]
-        scatter!(plt, all_xs, all_ys, label="Storage",
-                color=:lightgray, marker=:square, markersize=2, alpha=0.2)
+        # Plot storage locations by zone with distinct colors
+        for zone in [:high, :medium, :low]
+            zone_locs = filter(loc -> loc.zone == zone, warehouse.storage_locations)
+            if !isempty(zone_locs)
+                xs = [loc.position[1] * GRID_RESOLUTION for loc in zone_locs]
+                ys = [loc.position[2] * GRID_RESOLUTION for loc in zone_locs]
+                
+                color = zone == :high ? :red :
+                       zone == :medium ? :orange : :yellow
+                alpha = zone == :high ? 0.4 : zone == :medium ? 0.3 : 0.2
+                
+                scatter!(plt, xs, ys, label="$(titlecase(string(zone))) Storage",
+                        color=color, marker=:square, markersize=4, alpha=alpha)
+            end
+        end
         
-        # Plot docks
+        # Plot docks with enhanced visibility
         input_x = warehouse.input_dock[1] * GRID_RESOLUTION
         input_y = warehouse.input_dock[2] * GRID_RESOLUTION
         output_x = warehouse.output_dock[1] * GRID_RESOLUTION
         output_y = warehouse.output_dock[2] * GRID_RESOLUTION
         
-        scatter!(plt, [input_x], [input_y], label="Input",
-                color=:green, marker=:diamond, markersize=8)
-        scatter!(plt, [output_x], [output_y], label="Output",
-                color=:blue, marker=:diamond, markersize=8)
+        scatter!(plt, [input_x], [input_y], label="Input Dock (Demand)",
+                color=:green, marker=:diamond, markersize=12, markerstrokewidth=2)
+        scatter!(plt, [output_x], [output_y], label="Output Dock",
+                color=:blue, marker=:diamond, markersize=12, markerstrokewidth=2)
+        
+        # Add demand location markers (customer pickup areas)
+        demand_locations = [
+            (input_x, input_y + 0.3, "Demand A"),
+            (input_x, input_y - 0.3, "Demand B"),
+            (input_x + 0.3, input_y, "Demand C")
+        ]
+        
+        for (dx, dy, label) in demand_locations
+            scatter!(plt, [dx], [dy], label="",
+                    color=:lightgreen, marker=:triangle, markersize=8, alpha=0.7)
+            annotate!(plt, dx + 0.15, dy, text(label, :darkgreen, :left, 6))
+        end
         
         # Animate each AGV with Cartesian movement visualization
         agv_colors = [:purple, :red, :blue, :orange, :brown]
@@ -439,6 +462,7 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
                 elseif current_distance <= total_distance_x_to_pickup + total_distance_y_to_pickup
                     # Phase 2: Vertical to pickup
                     phase = "→ Y-Axis"
+                    # Complete horizontal movement first
                     push!(trail_x, pickup_x)
                     push!(trail_y, start_y)
                     
@@ -489,10 +513,51 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
                         markersize=10, markerstrokewidth=2,
                         markerstrokecolor=:black)
                 
-                # Plot Cartesian trail with distinct phases
-                plot!(plt, trail_x, trail_y, label="",
-                     color=agv_colors[i], linewidth=3, alpha=0.7,
-                     linestyle=:solid)
+                # Plot Cartesian trail properly to avoid diagonal connections
+                if phase == "→ X-Axis"
+                    if current_distance <= total_distance_x_to_pickup
+                        # Phase 1: Horizontal to pickup
+                        plot!(plt, [start_x, current_x], [start_y, start_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                    else
+                        # Phase 4: Horizontal to output
+                        # Plot all completed segments
+                        plot!(plt, [start_x, pickup_x], [start_y, start_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                        plot!(plt, [pickup_x, pickup_x], [start_y, pickup_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                        plot!(plt, [pickup_x, pickup_x], [pickup_y, output_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                        plot!(plt, [pickup_x, current_x], [output_y, output_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                    end
+                elseif phase == "→ Y-Axis"
+                    if current_distance <= total_distance_x_to_pickup + total_distance_y_to_pickup
+                        # Phase 2: Vertical to pickup
+                        plot!(plt, [start_x, pickup_x], [start_y, start_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                        plot!(plt, [pickup_x, pickup_x], [start_y, current_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                    else
+                        # Phase 3: Vertical to output level
+                        plot!(plt, [start_x, pickup_x], [start_y, start_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                        plot!(plt, [pickup_x, pickup_x], [start_y, pickup_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                        plot!(plt, [pickup_x, pickup_x], [pickup_y, current_y], label="",
+                             color=agv_colors[i], linewidth=3, alpha=0.7,
+                             linestyle=:solid)
+                    end
+                end
                 
                 # Add axis alignment indicators
                 if phase == "→ X-Axis"
@@ -507,21 +572,139 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
                           linestyle=:dash, alpha=0.5)
                 end
                 
-                # Plot pickup location (star when not reached)
+                # Plot pickup location (star when not reached) with storage info
                 if current_distance <= total_distance_x_to_pickup + total_distance_y_to_pickup
                     scatter!(plt, [pickup_x], [pickup_y], label="",
                             color=agv_colors[i], marker=:star5, markersize=8)
+                    
+                    # Add storage location marker
+                    storage_marker = "S$(order.id)"
+                    annotate!(plt, pickup_x + 0.2, pickup_y + 0.2, 
+                             text(storage_marker, agv_colors[i], :left, 7))
                 end
             end
         end
+# Add legend for demand and storage markers (inside animation loop)
+        annotate!(plt, 0.5, WAREHOUSE_HEIGHT - 0.3, 
+                 text("📦 Demand Points: Input Dock + Customer Pickup Areas", :darkgreen, :left, 10, :bold))
+        annotate!(plt, 0.5, WAREHOUSE_HEIGHT - 0.6, 
+                 text("🏭 Storage Zones: Red=High, Orange=Medium, Yellow=Low Frequency", :darkred, :left, 10, :bold))
     end
     
     # Save animation
     gif(anim, filename, fps=fps)
-    println("✅ Animation saved to: $filename")
+    println("✅ Enhanced animation saved to: $filename")
     println("   Duration: $(n_frames/fps) seconds at $(fps) fps")
+    println("   Features: Cartesian movement + Demand/Storage markers")
     
     return filename
+end
+
+function create_demand_storage_visualization(warehouse, orders, filename="demand_storage_markers.png")
+    """Create detailed visualization showing demand and storage location markers"""
+    
+    println("\n📍 CREATING DEMAND & STORAGE MARKERS VISUALIZATION...")
+    
+    plt = plot(size=(1400, 700), dpi=150, legend=:outertopright,
+               xlabel="X Position (meters)", ylabel="Y Position (meters)",
+               title="Warehouse Demand & Storage Location Markers",
+               xlims=(0, WAREHOUSE_WIDTH), ylims=(0, WAREHOUSE_HEIGHT),
+               aspect_ratio=:equal, grid=true)
+    
+    # Plot storage locations by zone with labels
+    for zone in [:high, :medium, :low]
+        zone_locs = filter(loc -> loc.zone == zone, warehouse.storage_locations)
+        if !isempty(zone_locs)
+            xs = [loc.position[1] * GRID_RESOLUTION for loc in zone_locs]
+            ys = [loc.position[2] * GRID_RESOLUTION for loc in zone_locs]
+            
+            color = zone == :high ? :red :
+                   zone == :medium ? :orange : :yellow
+            alpha = zone == :high ? 0.6 : zone == :medium ? 0.4 : 0.3
+            
+            scatter!(plt, xs, ys, label="$(titlecase(string(zone))) Frequency Storage",
+                    color=color, marker=:square, markersize=6, alpha=alpha)
+            
+            # Add sample storage location labels
+            for (i, loc) in enumerate(zone_locs[1:min(3, end)])
+                storage_x = loc.position[1] * GRID_RESOLUTION
+                storage_y = loc.position[2] * GRID_RESOLUTION
+                storage_label = "S$(loc.id):$(loc.item_type)"
+                annotate!(plt, storage_x + 0.1, storage_y + 0.1, 
+                         text(storage_label, color, :left, 6))
+            end
+        end
+    end
+    
+    # Plot docks with demand emphasis
+    input_x = warehouse.input_dock[1] * GRID_RESOLUTION
+    input_y = warehouse.input_dock[2] * GRID_RESOLUTION
+    output_x = warehouse.output_dock[1] * GRID_RESOLUTION
+    output_y = warehouse.output_dock[2] * GRID_RESOLUTION
+    
+    scatter!(plt, [input_x], [input_y], label="Input Dock (Primary Demand)",
+            color=:green, marker=:diamond, markersize=15, markerstrokewidth=3)
+    scatter!(plt, [output_x], [output_y], label="Output Dock",
+            color=:blue, marker=:diamond, markersize=15, markerstrokewidth=3)
+    
+    # Add multiple demand location markers around input dock
+    demand_locations = [
+        (input_x + 0.5, input_y + 0.5, "Demand Zone A", :lightgreen),
+        (input_x + 0.5, input_y - 0.5, "Demand Zone B", :lightgreen),
+        (input_x - 0.5, input_y, "Demand Zone C", :lightgreen),
+        (input_x, input_y + 0.8, "Urgent Demand", :red),
+        (input_x, input_y - 0.8, "Normal Demand", :orange),
+    ]
+    
+    for (dx, dy, label, color) in demand_locations
+        scatter!(plt, [dx], [dy], label="",
+                color=color, marker=:triangle, markersize=10, alpha=0.8)
+        annotate!(plt, dx + 0.2, dy, text(label, :black, :left, 8))
+    end
+    
+    # Plot order pickup locations with enhanced markers
+    for (i, order) in enumerate(orders)
+        pickup_x = order.pickup_location[1] * GRID_RESOLUTION
+        pickup_y = order.pickup_location[2] * GRID_RESOLUTION
+        
+        marker_color = order.priority == :urgent ? :red :
+                      order.priority == :normal ? :orange : :green
+        
+        scatter!(plt, [pickup_x], [pickup_y],
+                label="Order $(order.id) ($(order.priority))",
+                color=marker_color, marker=:star, markersize=12,
+                markerstrokewidth=2, alpha=0.9)
+        
+        # Add order information label
+        order_label = "O$(order.id):$(order.total_crates)cr"
+        annotate!(plt, pickup_x + 0.3, pickup_y + 0.3, 
+                 text(order_label, marker_color, :left, 7))
+    end
+    
+    # Add informative annotations
+    annotate!(plt, WAREHOUSE_WIDTH - 1, WAREHOUSE_HEIGHT - 0.3, 
+             text("📍 Storage Legend:", :black, :right, 12, :bold))
+    annotate!(plt, WAREHOUSE_WIDTH - 1, WAREHOUSE_HEIGHT - 0.6, 
+             text("• Red = High Frequency (Items A/B)", :darkred, :right, 10))
+    annotate!(plt, WAREHOUSE_WIDTH - 1, WAREHOUSE_HEIGHT - 0.9, 
+             text("• Orange = Medium Frequency (Item B)", :darkorange, :right, 10))
+    annotate!(plt, WAREHOUSE_WIDTH - 1, WAREHOUSE_HEIGHT - 1.2, 
+             text("• Yellow = Low Frequency (Item C)", :darkgoldenrod, :right, 10))
+    
+    annotate!(plt, 1, WAREHOUSE_HEIGHT - 0.3, 
+             text("🚚 Demand Points:", :darkgreen, :left, 12, :bold))
+    annotate!(plt, 1, WAREHOUSE_HEIGHT - 0.6, 
+             text("• Input Dock = Primary demand source", :darkgreen, :left, 10))
+    annotate!(plt, 1, WAREHOUSE_HEIGHT - 0.9, 
+             text("• Demand Zones = Customer pickup areas", :darkgreen, :left, 10))
+    annotate!(plt, 1, WAREHOUSE_HEIGHT - 1.2, 
+             text("• Stars = Order pickup locations", :darkgreen, :left, 10))
+    
+    # Save visualization
+    savefig(plt, filename)
+    println("✅ Demand & Storage markers visualization saved to: $filename")
+    
+    return plt
 end
 
 # ===== MAIN DEMO FUNCTION =====
@@ -552,28 +735,38 @@ function run_visualization_demo()
         end
     end
     
-    # Create visualizations
+# Create visualizations
     println("\n📊 GENERATING VISUALIZATIONS...")
     
     # 1. Static warehouse layout
     visualize_warehouse_layout(warehouse, agvs, orders, 
                                "warehouse_layout.png")
     
-    # 2. AGV routes
+    # 2. AGV routes with Cartesian movement
     visualize_agv_routes(warehouse, agvs, orders, assignments,
                         "agv_routes.png")
     
-    # 3. Animation
+    # 3. Demand and Storage location markers
+    create_demand_storage_visualization(warehouse, orders,
+                                   "demand_storage_markers.png")
+    
+    # 4. Enhanced animation with Cartesian movement + markers
     create_agv_animation(warehouse, agvs, orders, assignments,
                         "agv_animation.gif")
     
     println("\n" * "=" ^ 70)
-    println("✅ VISUALIZATION DEMO COMPLETED!")
+    println("✅ ENHANCED VISUALIZATION DEMO COMPLETED!")
     println("=" ^ 70)
     println("\n📁 Generated Files:")
-    println("   1. warehouse_layout.png  - Static warehouse layout")
-    println("   2. agv_routes.png        - AGV routes with distances")
-    println("   3. agv_animation.gif     - Animated AGV movement")
+    println("   1. warehouse_layout.png        - Static warehouse layout")
+    println("   2. agv_routes.png            - AGV Cartesian routes")
+    println("   3. demand_storage_markers.png  - Demand & Storage markers")
+    println("   4. agv_animation.gif          - Enhanced animation with markers")
+    println("\n✨ Features:")
+    println("   • Cartesian movement (X-axis then Y-axis)")
+    println("   • Demand location markers (Input Dock + Customer areas)")
+    println("   • Storage zone markers (High/Medium/Low frequency)")
+    println("   • Fixed diagonal movement issue")
     println("\nAll files saved in: $(pwd())")
     println("=" ^ 70)
 end

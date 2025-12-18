@@ -129,9 +129,13 @@ Improvement:      15% distance reduction
 - **Layout Details**: ABC storage classification and dock positions
 
 ### Dynamic Visualizations
-- **Movement Animation**: 5-second GIF showing AGV movement patterns
-- **Real-time Progress**: Frame-by-frame AGV position updates
-- **Route Tracking**: Visual trail showing complete AGV journeys
+- **Enhanced Movement Animation**: 10-second GIF showing AGV Cartesian movement patterns
+- **Cartesian Path Visualization**: X-axis then Y-axis movement (realistic warehouse movement)
+- **Demand Location Markers**: Input dock and customer demand zones with clear visual indicators
+- **Storage Zone Markers**: Color-coded storage locations (Red: High, Orange: Medium, Yellow: Low)
+- **Real-time Progress**: Frame-by-frame AGV position updates with phase indicators
+- **Route Tracking**: Visual trail showing complete AGV journeys without diagonal artifacts
+- **Axis Alignment Indicators**: Dashed lines emphasizing current movement direction
 
 ### Text-Based Analysis
 - **ASCII Warehouse Map**: Text representation of warehouse layout
@@ -156,12 +160,13 @@ julia comprehensive_demo.jl
 ```
 *Runs complete VNS optimization and KPI analysis*
 
-#### 3. Generate Visualizations
+#### 3. Generate Enhanced Visualizations
 ```bash
 cd warehouse_optimization
 julia visualization_demo.jl
 ```
-*Creates: warehouse_layout.png, agv_routes.png, agv_animation.gif*
+*Creates: warehouse_layout.png, agv_routes.png, demand_storage_markers.png, agv_animation.gif*
+*Features: Cartesian movement, demand & storage markers, fixed diagonal movement*
 
 #### 4. Text-Based Analysis
 ```bash
@@ -197,7 +202,8 @@ warehouse_optimization/
 │
 ├── warehouse_layout.png           # Static warehouse layout
 ├── agv_routes.png                 # AGV route visualization
-└── agv_animation.gif              # Movement animation
+├── demand_storage_markers.png    # Demand & storage location markers
+└── agv_animation.gif              # Enhanced movement animation
 ```
 
 
@@ -257,7 +263,7 @@ warehouse_optimization/
 
 ## 📁 Generated Visualization Files
 
-After running `julia visualization_demo.jl`, the following files are created:
+After running `julia visualization_demo.jl`, the following enhanced files are created:
 
 ### Warehouse Layout
 ![Warehouse Layout](warehouse_layout.png)
@@ -272,19 +278,43 @@ After running `julia visualization_demo.jl`, the following files are created:
 ![AGV Routes](agv_routes.png)
 
 **`agv_routes.png`** - AGV route visualization displaying:
-- Optimized paths for each AGV (color-coded)
+- Optimized Cartesian paths for each AGV (color-coded)
 - Distance annotations on each route segment
 - Start → Pickup → Output journey mapping
 - Storage location background (faded)
 
+### Demand & Storage Markers
+![Demand & Storage Markers](demand_storage_markers.png)
+
+**`demand_storage_markers.png`** - Comprehensive demand & storage visualization showing:
+- **Storage Zones**: Color-coded by frequency (Red: High, Orange: Medium, Yellow: Low)
+- **Storage Labels**: Sample locations with ID and item type information
+- **Demand Points**: Input dock and customer pickup areas with clear markers
+- **Legends**: Complete explanation of storage and demand systems
+- **Warehouse Flow**: Visual representation of demand-storage relationship
+
 ### Movement Animation
 ![AGV Animation](agv_animation.gif)
 
-**`agv_animation.gif`** - 5-second animated simulation showing:
-- Real-time AGV movement (10 FPS)
-- Pickup and delivery operations
-- Route progression with motion trails
-- Progress indicators and status updates
+**`agv_animation.gif`** - 10-second enhanced animated simulation showing:
+- **Cartesian AGV Movement**: X-axis then Y-axis movement (realistic warehouse paths)
+- **Demand Location Markers**: Input dock and customer demand zones  
+- **Storage Zone Markers**: Color-coded storage locations (High/Medium/Low frequency)
+- **Fixed Diagonal Movement**: Eliminated diagonal artifacts for true Cartesian paths
+- **Axis Alignment Indicators**: Dashed lines showing current movement direction
+- **Real-time Progress**: Frame-by-frame AGV position updates with phase indicators
+- **Route Visualization**: Clear trail system showing complete AGV journeys
+- **Storage Location Labels**: Each order pickup location marked with storage ID
+
+### Demand & Storage Markers
+![Demand & Storage Markers](demand_storage_markers.png)
+
+**`demand_storage_markers.png`** - Comprehensive visualization showing:
+- **Storage Zone Classification**: Color-coded by frequency (Red: High, Orange: Medium, Yellow: Low)
+- **Storage Location Labels**: Sample storage locations with ID and item type information
+- **Demand Point Visualization**: Input dock and customer pickup areas with triangle markers
+- **Legend & Annotations**: Clear explanations of storage and demand systems
+- **Warehouse Layout**: Complete overview of storage organization and demand flow
 
 ---
 
@@ -299,11 +329,14 @@ The warehouse optimization system is **fully functional and production-ready** w
 - 24/7 simulation with shift management and KPI tracking
 - Comprehensive testing and validation framework
 
-### ✅ **Visualization System**
-- Static PNG visualizations of warehouse layout and routes
-- Animated GIF showing AGV movement patterns
+### ✅ **Enhanced Visualization System**
+- Static PNG visualizations of warehouse layout and Cartesian routes
+- Enhanced animated GIF with fixed diagonal movement and demand/storage markers
+- Dedicated demand & storage location visualization with zone classification
 - Text-based ASCII analysis for quick debugging
-- Professional-quality graphics for industrial presentations
+- Professional-quality graphics with Cartesian movement patterns
+- Demand point markers (Input dock + Customer zones)
+- Storage zone markers (High/Medium/Low frequency classification)
 
 ### ✅ **Performance Validation**
 - **100% AGV utilization** (exceeds 80% target)
