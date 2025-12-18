@@ -235,10 +235,22 @@ function display_agv_routes(warehouse, agvs, orders, assignments)
             total_route_dist = dist_to_pickup + dist_to_output
             total_distance += total_route_dist
             
-            println("\n   Route Segments:")
-            println("   ├─ AGV Start → Pickup:  $(round(dist_to_pickup, digits=2))m")
-            println("   ├─ Pickup → Output:     $(round(dist_to_output, digits=2))m")
-            println("   └─ Total Route:         $(round(total_route_dist, digits=2))m")
+println("\n   Cartesian Route Segments:")
+            # Calculate X and Y components for pickup segment
+            pickup_dx = pickup_real_x - agv.position[1]
+            pickup_dy = pickup_real_y - agv.position[2]
+            
+            # Calculate X and Y components for output segment  
+            output_dx = output_real_x - pickup_real_x
+            output_dy = output_real_y - pickup_real_y
+            
+            println("   ├─ Start → Pickup:")
+            println("   │  ├─ Horizontal (X): $(round(abs(pickup_dx), digits=2))m")
+            println("   │  └─ Vertical (Y):   $(round(abs(pickup_dy), digits=2))m")
+            println("   ├─ Pickup → Output:")
+            println("   │  ├─ Horizontal (X): $(round(abs(output_dx), digits=2))m")
+            println("   │  └─ Vertical (Y):   $(round(abs(output_dy), digits=2))m")
+            println("   └─ Total Manhattan Distance: $(round(total_route_dist, digits=2))m")
             
             # Time calculation
             travel_time = total_route_dist / AGV_SPEED_M_PER_MIN

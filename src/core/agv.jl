@@ -19,6 +19,25 @@ Current state of an AGV
 @enum AGVState IDLE MOVING LOADING UNLOADING CHARGING MAINTENANCE
 
 """
+    Order
+
+Represents a customer order to be fulfilled
+"""
+mutable struct Order
+    id::Int
+    items::Vector{Tuple{Symbol, Int}}  # (item_type, quantity) pairs
+    total_weight::Float64
+    total_crates::Int
+    priority::Symbol                    # :urgent, :normal, :low
+    creation_time::Float64               # When order was created
+    deadline::Float64                   # Delivery deadline (minutes)
+    pickup_location::Tuple{Int, Int}     # Storage location coordinates
+    status::Symbol                       # :pending, :assigned, :in_progress, :completed, :late
+    assigned_agv::Union{Int, Nothing}    # AGV ID if assigned
+    completion_time::Union{Float64, Nothing}  # When completed
+end
+
+"""
     AGV
 
 Individual AGV robot with position, capacity, and state tracking
@@ -36,25 +55,6 @@ mutable struct AGV
     idle_time::Float64                 # Total idle time (minutes)
     tasks_completed::Int               # Number of completed tasks
     last_update_time::Float64          # Simulation time of last update
-end
-
-"""
-    Order
-
-Represents a customer order to be fulfilled
-"""
-mutable struct Order
-    id::Int
-    items::Vector{Tuple{Symbol, Int}}  # (item_type, quantity) pairs
-    total_weight::Float64
-    total_crates::Int
-    priority::Symbol                    # :urgent, :normal, :low
-    creation_time::Float64               # When order was created
-    deadline::Float64                   # Delivery deadline (minutes)
-    pickup_location::Tuple{Int, Int}     # Storage location coordinates
-    status::Symbol                       # :pending, :assigned, :in_progress, :completed, :late
-    assigned_agv::Union{Int, Nothing}    # AGV ID if assigned
-    completion_time::Union{Float64, Nothing}  # When completed
 end
 
 """
@@ -136,42 +136,74 @@ end
 """
     update_agv_position!(agv::AGV, time_elapsed::Float64)
 
-Update AGV position based on current state and target
+Update AGV position based on current state and target using Cartesian movement
 """
 function update_agv_position!(agv::AGV, time_elapsed::Float64)
     if agv.state == MOVING && agv.target_position !== nothing
         current_pos = agv.position
         target_pos = agv.target_position
         
-        # Calculate direction and distance
+        # Calculate Manhattan distance for grid-based movement
         dx = target_pos[1] - current_pos[1]
         dy = target_pos[2] - current_pos[2]
-        distance = sqrt(dx^2 + dy^2)
+        manhattan_distance = abs(dx) + abs(dy)
         
-        if distance < 0.1  # Reached target
+        if manhattan_distance < 0.1  # Reached target
             agv.position = target_pos
             agv.target_position = nothing
             agv.state = determine_next_state(agv)
         else
-            # Move towards target
+            # Move towards target using Cartesian movement (one axis at a time)
             move_distance = AGV_SPEED_M_PER_MIN * time_elapsed
             
-            if move_distance >= distance
-                agv.position = target_pos
-                agv.target_position = nothing
-                agv.state = determine_next_state(agv)
+            # Prioritize X-axis movement first, then Y-axis
+            if abs(dx) > 0.1
+                # Move along X-axis
+                if move_distance >= abs(dx)
+                    # Complete X-axis movement
+                    agv.position = (target_pos[1], current_pos[2])
+                    agv.total_distance_traveled += abs(dx)
+                    move_distance -= abs(dx)
+                    
+                    # Use remaining distance for Y-axis movement
+                    if move_distance > 0 && abs(dy) > 0.1
+                        if move_distance >= abs(dy)
+                            # Complete Y-axis movement
+                            agv.position = target_pos
+                            agv.total_distance_traveled += abs(dy)
+                            agv.target_position = nothing
+                            agv.state = determine_next_state(agv)
+                        else
+                            # Move partially along Y-axis
+                            y_direction = dy > 0 ? 1 : -1
+                            agv.position = (target_pos[1], current_pos[2] + y_direction * move_distance)
+                            agv.total_distance_traveled += move_distance
+                        end
+                    end
+                else
+                    # Move partially along X-axis
+                    x_direction = dx > 0 ? 1 : -1
+                    agv.position = (current_pos[1] + x_direction * move_distance, current_pos[2])
+                    agv.total_distance_traveled += move_distance
+                end
             else
-                # Move proportionally
-                ratio = move_distance / distance
-                agv.position = (
-                    current_pos[1] + dx * ratio,
-                    current_pos[2] + dy * ratio
-                )
+                # Only Y-axis movement remaining
+                if move_distance >= abs(dy)
+                    # Complete Y-axis movement
+                    agv.position = target_pos
+                    agv.total_distance_traveled += abs(dy)
+                    agv.target_position = nothing
+                    agv.state = determine_next_state(agv)
+                else
+                    # Move partially along Y-axis
+                    y_direction = dy > 0 ? 1 : -1
+                    agv.position = (current_pos[1], current_pos[2] + y_direction * move_distance)
+                    agv.total_distance_traveled += move_distance
+                end
             end
             
-            # Update work time and distance
+            # Update work time
             agv.work_time_remaining -= time_elapsed
-            agv.total_distance_traveled += move_distance
         end
     elseif agv.state == IDLE
         agv.idle_time += time_elapsed
@@ -257,12 +289,9 @@ end
 """
     check_collision(agv1::AGV, agv2::AGV, safety_distance::Float64 = 0.5)
 
-Check if two AGVs are too close (potential collision)
+Check if two AGVs are too close (potential collision) using Euclidean distance
 """
 function check_collision(agv1::AGV, agv2::AGV, safety_distance::Float64 = 0.5)
-    distance = sqrt(
-        (agv1.position[1] - agv2.position[1])^2 + 
-        (agv1.position[2] - agv2.position[2])^2
-    )
+    distance = calculate_euclidean_distance(agv1.position, agv2.position)
     return distance < safety_distance
 end

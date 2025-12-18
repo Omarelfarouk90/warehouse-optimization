@@ -206,14 +206,14 @@ function visualize_warehouse_layout(warehouse, agvs, orders, filename="warehouse
 end
 
 function visualize_agv_routes(warehouse, agvs, orders, assignments, filename="agv_routes.png")
-    """Visualize AGV routes to assigned orders"""
+    """Visualize AGV routes with Cartesian movement patterns"""
     
-    println("\n🛣️  CREATING AGV ROUTE VISUALIZATION...")
+    println("\n🛣️  CREATING AGV CARTESIAN ROUTE VISUALIZATION...")
     
     # Create plot
     plt = plot(size=(1200, 600), dpi=150, legend=:outertopright,
                xlabel="X Position (meters)", ylabel="Y Position (meters)",
-               title="AGV Routes - Optimized Paths",
+               title="AGV Cartesian Routes - X/Y Axis Movement",
                xlims=(0, WAREHOUSE_WIDTH), ylims=(0, WAREHOUSE_HEIGHT),
                aspect_ratio=:equal, grid=true)
     
@@ -237,7 +237,7 @@ function visualize_agv_routes(warehouse, agvs, orders, assignments, filename="ag
     # Colors for different AGVs
     agv_colors = [:purple, :red, :blue, :orange, :brown]
     
-    # Plot routes for each AGV
+    # Plot Cartesian routes for each AGV
     for (i, agv) in enumerate(agvs)
         if agv.current_task !== nothing
             order = agv.current_task
@@ -250,44 +250,97 @@ function visualize_agv_routes(warehouse, agvs, orders, assignments, filename="ag
             pickup_x = order.pickup_location[1] * GRID_RESOLUTION
             pickup_y = order.pickup_location[2] * GRID_RESOLUTION
             
-            # Route: Start -> Pickup -> Output
-            route_x = [start_x, pickup_x, output_x]
-            route_y = [start_y, pickup_y, output_y]
+            # Cartesian route: Start -> (pickup_x, start_y) -> pickup -> (pickup_x, output_y) -> output
+            # This shows step-by-step X/Y movement
+            waypoint1_x = pickup_x
+            waypoint1_y = start_y
             
-            # Plot route
-            plot!(plt, route_x, route_y,
-                 label="AGV $(agv.id) Route",
-                 color=agv_colors[i], linewidth=2, arrow=true,
-                 linestyle=:dash)
+            route_x = [start_x, waypoint1_x, pickup_x, pickup_x, output_x]
+            route_y = [start_y, waypoint1_y, pickup_y, output_y, output_y]
+            
+            # Plot Cartesian route with distinct segments
+            # Segment 1: Horizontal to pickup X
+            plot!(plt, [start_x, waypoint1_x], [start_y, waypoint1_y],
+                 label="", color=agv_colors[i], linewidth=3, 
+                 linestyle=:solid, alpha=0.8)
+            
+            # Segment 2: Vertical to pickup Y  
+            plot!(plt, [waypoint1_x, pickup_x], [waypoint1_y, pickup_y],
+                 label="", color=agv_colors[i], linewidth=3,
+                 linestyle=:solid, alpha=0.8)
+            
+            # Segment 3: Vertical to output Y
+            plot!(plt, [pickup_x, pickup_x], [pickup_y, output_y],
+                 label="", color=agv_colors[i], linewidth=3,
+                 linestyle=:dash, alpha=0.6)
+            
+            # Segment 4: Horizontal to output X
+            plot!(plt, [pickup_x, output_x], [output_y, output_y],
+                 label="", color=agv_colors[i], linewidth=3,
+                 linestyle=:dash, alpha=0.6)
             
             # Plot AGV position
             scatter!(plt, [start_x], [start_y],
-                    label="", color=agv_colors[i], marker=:circle,
-                    markersize=8, markerstrokewidth=2)
+                    label="AGV $(agv.id) Start", color=agv_colors[i], 
+                    marker=:circle, markersize=10, markerstrokewidth=2)
+            
+            # Plot intermediate waypoint
+            scatter!(plt, [waypoint1_x], [waypoint1_y],
+                    label="", color=agv_colors[i], marker=:diamond,
+                    markersize=6, alpha=0.7)
             
             # Plot pickup location
             scatter!(plt, [pickup_x], [pickup_y],
                     label="Order $(order.id) ($(order.priority))",
                     color=agv_colors[i], marker=:star5, markersize=8)
             
-            # Calculate and display distance
-            dist_to_pickup = calculate_distance(
-                (round(Int, start_x / GRID_RESOLUTION), round(Int, start_y / GRID_RESOLUTION)),
-                order.pickup_location
-            ) * GRID_RESOLUTION
+            # Calculate distances for each segment
+            dist_horizontal_pickup = abs(pickup_x - start_x)
+            dist_vertical_pickup = abs(pickup_y - start_y)
+            dist_vertical_output = abs(output_y - pickup_y)
+            dist_horizontal_output = abs(output_x - pickup_x)
             
-            dist_to_output = calculate_distance(
-                order.pickup_location,
-                (round(Int, output_x / GRID_RESOLUTION), round(Int, output_y / GRID_RESOLUTION))
-            ) * GRID_RESOLUTION
+            total_dist = dist_horizontal_pickup + dist_vertical_pickup + 
+                       dist_vertical_output + dist_horizontal_output
             
-            total_dist = dist_to_pickup + dist_to_output
+            # Annotate with segment distances
+            # Annotate horizontal segment to pickup
+            mid_h_x = (start_x + waypoint1_x) / 2
+            annotate!(plt, mid_h_x, waypoint1_y + 0.1,
+                     text("H:$(round(dist_horizontal_pickup, digits=1))m", 
+                           agv_colors[i], :center, 7))
             
-            # Annotate with distance
-            mid_x = (start_x + pickup_x) / 2
-            mid_y = (start_y + pickup_y) / 2
-            annotate!(plt, mid_x, mid_y,
-                     text("$(round(total_dist, digits=1))m", agv_colors[i], :center, 8))
+            # Annotate vertical segment to pickup
+            mid_v_x = waypoint1_x + 0.1
+            mid_v_y = (waypoint1_y + pickup_y) / 2
+            annotate!(plt, mid_v_x, mid_v_y,
+                     text("V:$(round(dist_vertical_pickup, digits=1))m", 
+                           agv_colors[i], :center, 7))
+            
+            # Total distance annotation
+            annotate!(plt, (start_x + output_x) / 2, output_y + 0.3,
+                     text("Total: $(round(total_dist, digits=1))m", 
+                           agv_colors[i], :center, 8, :bold))
+            
+            # Add movement direction indicators
+            arrow_length = 0.3
+            # Horizontal arrow to pickup
+            if dist_horizontal_pickup > 0.1
+                arrow_dir = dist_horizontal_pickup > 0 ? 1 : -1
+                plot!(plt, [start_x + arrow_dir * dist_horizontal_pickup/2 - arrow_dir * arrow_length/2, 
+                            start_x + arrow_dir * dist_horizontal_pickup/2 + arrow_dir * arrow_length/2], 
+                        [waypoint1_y, waypoint1_y],
+                       label="", color=agv_colors[i], linewidth=2, arrow=:closed)
+            end
+            
+            # Vertical arrow to pickup
+            if dist_vertical_pickup > 0.1
+                arrow_dir = dist_vertical_pickup > 0 ? 1 : -1
+                plot!(plt, [waypoint1_x, waypoint1_x], 
+                        [start_y + arrow_dir * dist_vertical_pickup/2 - arrow_dir * arrow_length/2,
+                         start_y + arrow_dir * dist_vertical_pickup/2 + arrow_dir * arrow_length/2],
+                       label="", color=agv_colors[i], linewidth=2, arrow=:closed)
+            end
         end
     end
     
@@ -301,13 +354,13 @@ end
 # ===== ANIMATION =====
 
 function create_agv_animation(warehouse, agvs, orders, assignments, filename="agv_animation.gif")
-    """Create animated GIF of AGV movement"""
+    """Create animated GIF of AGV movement showing Cartesian patterns"""
     
-    println("\n🎬 CREATING AGV ANIMATION...")
+    println("\n🎬 CREATING AGV ANIMATION WITH CARTESIAN MOVEMENT...")
     println("   This may take a moment...")
     
-    # Animation parameters
-    n_frames = 50
+    # Animation parameters - more frames for smoother Cartesian visualization
+    n_frames = 100
     fps = 10
     
     # Create animation
@@ -317,7 +370,7 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
         # Create plot for this frame
         plt = plot(size=(1200, 600), dpi=100,
                    xlabel="X Position (meters)", ylabel="Y Position (meters)",
-                   title="AGV Movement Animation - Frame $frame/$n_frames ($(round(t*100, digits=0))%)",
+                   title="AGV Cartesian Movement Animation - Frame $frame/$n_frames ($(round(t*100, digits=0))%)",
                    xlims=(0, WAREHOUSE_WIDTH), ylims=(0, WAREHOUSE_HEIGHT),
                    aspect_ratio=:equal, grid=true, legend=:outertopright)
         
@@ -338,7 +391,7 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
         scatter!(plt, [output_x], [output_y], label="Output",
                 color=:blue, marker=:diamond, markersize=8)
         
-        # Animate each AGV
+        # Animate each AGV with Cartesian movement visualization
         agv_colors = [:purple, :red, :blue, :orange, :brown]
         
         for (i, agv) in enumerate(agvs)
@@ -351,42 +404,111 @@ function create_agv_animation(warehouse, agvs, orders, assignments, filename="ag
                 pickup_x = order.pickup_location[1] * GRID_RESOLUTION
                 pickup_y = order.pickup_location[2] * GRID_RESOLUTION
                 
-                # Animate movement: Start -> Pickup (first half) -> Output (second half)
-                if t < 0.5
-                    # Moving to pickup
-                    progress = t * 2  # 0 to 1
+                # Calculate Cartesian path with intermediate waypoint
+                # Phase 1: Move horizontally to pickup_x, keep start_y
+                # Phase 2: Move vertically to pickup_y, keep pickup_x
+                # Phase 3: Move vertically to output_y, keep pickup_x
+                # Phase 4: Move horizontally to output_x, keep output_y
+                
+                total_distance_x_to_pickup = abs(pickup_x - start_x)
+                total_distance_y_to_pickup = abs(pickup_y - start_y)
+                total_distance_x_to_output = abs(output_x - pickup_x)
+                total_distance_y_to_output = abs(output_y - pickup_y)
+                
+                total_distance = total_distance_x_to_pickup + total_distance_y_to_pickup + 
+                               total_distance_x_to_output + total_distance_y_to_output
+                
+                current_distance = t * total_distance
+                
+                # Determine current position along Cartesian path
+                current_x = start_x
+                current_y = start_y
+                phase = ""
+                trail_x = [start_x]
+                trail_y = [start_y]
+                
+                if current_distance <= total_distance_x_to_pickup
+                    # Phase 1: Horizontal to pickup
+                    phase = "→ X-Axis"
+                    progress = current_distance / total_distance_x_to_pickup
                     current_x = start_x + (pickup_x - start_x) * progress
+                    current_y = start_y
+                    push!(trail_x, current_x)
+                    push!(trail_y, current_y)
+                    
+                elseif current_distance <= total_distance_x_to_pickup + total_distance_y_to_pickup
+                    # Phase 2: Vertical to pickup
+                    phase = "→ Y-Axis"
+                    push!(trail_x, pickup_x)
+                    push!(trail_y, start_y)
+                    
+                    remaining_distance = current_distance - total_distance_x_to_pickup
+                    progress = remaining_distance / total_distance_y_to_pickup
+                    current_x = pickup_x
                     current_y = start_y + (pickup_y - start_y) * progress
-                    status = "→ Pickup"
-                else
-                    # Moving to output
-                    progress = (t - 0.5) * 2  # 0 to 1
-                    current_x = pickup_x + (output_x - pickup_x) * progress
+                    push!(trail_x, current_x)
+                    push!(trail_y, current_y)
+                    
+                elseif current_distance <= total_distance_x_to_pickup + total_distance_y_to_pickup + total_distance_y_to_output
+                    # Phase 3: Vertical to output level
+                    phase = "→ Y-Axis"
+                    push!(trail_x, pickup_x)
+                    push!(trail_y, start_y)
+                    push!(trail_x, pickup_x)
+                    push!(trail_y, pickup_y)
+                    
+                    remaining_distance = current_distance - total_distance_x_to_pickup - total_distance_y_to_pickup
+                    progress = remaining_distance / total_distance_y_to_output
+                    current_x = pickup_x
                     current_y = pickup_y + (output_y - pickup_y) * progress
-                    status = "→ Output"
+                    push!(trail_x, current_x)
+                    push!(trail_y, current_y)
+                    
+                else
+                    # Phase 4: Horizontal to output
+                    phase = "→ X-Axis"
+                    push!(trail_x, pickup_x)
+                    push!(trail_y, start_y)
+                    push!(trail_x, pickup_x)
+                    push!(trail_y, pickup_y)
+                    push!(trail_x, pickup_x)
+                    push!(trail_y, output_y)
+                    
+                    remaining_distance = current_distance - total_distance_x_to_pickup - total_distance_y_to_pickup - total_distance_y_to_output
+                    progress = remaining_distance / total_distance_x_to_output
+                    current_x = pickup_x + (output_x - pickup_x) * progress
+                    current_y = output_y
+                    push!(trail_x, current_x)
+                    push!(trail_y, current_y)
                 end
                 
-                # Plot AGV current position
+                # Plot AGV current position with phase indicator
                 scatter!(plt, [current_x], [current_y],
-                        label="AGV $(agv.id) $status",
+                        label="AGV $(agv.id) $phase",
                         color=agv_colors[i], marker=:circle,
                         markersize=10, markerstrokewidth=2,
                         markerstrokecolor=:black)
                 
-                # Plot trail
-                if t < 0.5
-                    trail_x = [start_x, current_x]
-                    trail_y = [start_y, current_y]
-                else
-                    trail_x = [start_x, pickup_x, current_x]
-                    trail_y = [start_y, pickup_y, current_y]
+                # Plot Cartesian trail with distinct phases
+                plot!(plt, trail_x, trail_y, label="",
+                     color=agv_colors[i], linewidth=3, alpha=0.7,
+                     linestyle=:solid)
+                
+                # Add axis alignment indicators
+                if phase == "→ X-Axis"
+                    # Show horizontal line to emphasize X-axis movement
+                    plot!(plt, [start_x, current_x], [current_y, current_y],
+                          label="", color=agv_colors[i], linewidth=1, 
+                          linestyle=:dash, alpha=0.5)
+                elseif phase == "→ Y-Axis"
+                    # Show vertical line to emphasize Y-axis movement  
+                    plot!(plt, [current_x, current_x], [start_y, current_y],
+                          label="", color=agv_colors[i], linewidth=1,
+                          linestyle=:dash, alpha=0.5)
                 end
                 
-                plot!(plt, trail_x, trail_y, label="",
-                     color=agv_colors[i], linewidth=2, alpha=0.5)
-                
-                # Plot pickup location (star when not picked up)
-                if t < 0.5
+                # Plot pickup location (star when not reached)
+                if current_distance <= total_distance_x_to_pickup + total_distance_y_to_pickup
                     scatter!(plt, [pickup_x], [pickup_y], label="",
                             color=agv_colors[i], marker=:star5, markersize=8)
                 end

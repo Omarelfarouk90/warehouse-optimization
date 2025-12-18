@@ -202,6 +202,15 @@ function calculate_distance(pos1::Tuple{Int, Int}, pos2::Tuple{Int, Int})
 end
 
 """
+    calculate_euclidean_distance(pos1, pos2)
+
+Calculate Euclidean distance between two positions (for collision detection)
+"""
+function calculate_euclidean_distance(pos1::Tuple{Float64, Float64}, pos2::Tuple{Float64, Float64})
+    return sqrt((pos1[1] - pos2[1])^2 + (pos1[2] - pos2[2])^2)
+end
+
+"""
     find_nearest_storage(warehouse, item_type, capacity_needed)
 
 Find nearest storage location for given item type and capacity
